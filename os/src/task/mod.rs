@@ -153,6 +153,31 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    fn get_syscall_count(&self,id:usize)->isize{
+        let mut inner=self.inner.exclusive_access();
+        let mut i: usize=0;
+        let current = inner.current_task;
+        while inner.tasks[current].ids[i]>0&&inner.tasks[current].ids[i]!=id{
+            i+=1;
+       }
+       if inner.tasks[current].ids[i]==0{
+            inner.tasks[current].ids[i]=id;
+        }
+        inner.tasks[current].counts[i]
+    }
+    fn add_syscall_count(&self,id:usize){
+        let mut inner=self.inner.exclusive_access();
+        let mut i: usize=0;
+        let current = inner.current_task;
+        while inner.tasks[current].ids[i]>0&&inner.tasks[current].ids[i]!=id{
+            i+=1;
+        }
+        if inner.tasks[current].ids[i]==0{
+            inner.tasks[current].ids[i]=id;
+        }
+        inner.tasks[current].counts[i]+=1
+    }
 }
 
 /// Run the first task in task list.
@@ -201,4 +226,13 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Get tht count of the syscall by id.
+pub fn get_syscall_count(id:usize)->isize{
+    TASK_MANAGER.get_syscall_count(id)
+}
+/// Add tht count of the syscall by id.
+pub fn add_syscall_count(id:usize){
+    TASK_MANAGER.add_syscall_count(id);
 }
