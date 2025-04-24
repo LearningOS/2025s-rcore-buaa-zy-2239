@@ -15,6 +15,7 @@ mod switch;
 mod task;
 
 use crate::loader::{get_app_data, get_num_app};
+use crate::mm::{MapPermission, VirtAddr};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
@@ -176,7 +177,19 @@ impl TaskManager {
         if inner.tasks[current].ids[i]==0{
             inner.tasks[current].ids[i]=id;
         }
-        inner.tasks[current].counts[i]+=1
+        inner.tasks[current].counts[i]+=1;
+    }
+    fn insert_framed_area(&self,start:usize,len:usize,prot:usize){
+        let start_va=VirtAddr::from(start);
+        let end_va=VirtAddr::from(start+len);
+        let mut permission = MapPermission::empty();
+        if prot & 0x1 != 0 { permission.insert(MapPermission::R); }
+        if prot & 0x2 != 0 { permission.insert(MapPermission::W); }
+        if prot & 0x4 != 0 { permission.insert(MapPermission::X); }
+        permission.insert(MapPermission::U);
+        let mut inner=self.inner.exclusive_access();
+        let cur=inner.current_task;
+        inner.tasks[cur].memory_set.insert_framed_area(start_va, end_va, permission);
     }
 }
 
@@ -235,4 +248,8 @@ pub fn get_syscall_count(id:usize)->isize{
 /// Add tht count of the syscall by id.
 pub fn add_syscall_count(id:usize){
     TASK_MANAGER.add_syscall_count(id);
+}
+/// insert apparea in
+pub fn insert_framed_area(start:usize,len:usize,prot:usize){
+    TASK_MANAGER.insert_framed_area(start, len, prot);
 }
