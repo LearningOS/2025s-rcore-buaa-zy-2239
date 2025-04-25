@@ -2,12 +2,10 @@
 use alloc::sync::Arc;
 
 use crate::{
-    loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
-    task::{
+    config::PAGE_SIZE, loader::get_app_data_by_name, mm::{translated_refmut, translated_str, PageTable, VirtAddr}, task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next,
-    },
+    }
 };
 
 #[repr(C)]
@@ -114,21 +112,56 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
 }
 
 /// YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+// YOUR JOB: Implement mmap.
+pub fn sys_mmap(start: usize, len: usize, prot: usize) -> isize {
+    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
+    let page_table=PageTable::from_token(current_user_token());
+    if start%PAGE_SIZE!=0{
+        return -1;
+    }
+    if (prot & !0x7!=0) || prot &0x7==0{
+        return -1;
+    }
+    let num_pages=(len+PAGE_SIZE-1)/PAGE_SIZE;
+    if num_pages==0{
+        return 0;
+    }
+    for i in 0..num_pages{
+        let vpn=VirtAddr::from(start+i*PAGE_SIZE).floor();
+        if page_table.translate(vpn).is_some(){
+            //println!("{:?} have mapped into {:?}",vpn,page_table.translate(vpn).unwrap().ppn());
+            if page_table.translate(vpn).unwrap().is_valid(){
+                 return -1;
+            }
+           
+        }
+    }
+    insert_framed_area(start, len, prot);
+    return 0;
 }
 
-/// YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+// YOUR JOB: Implement munmap.
+pub fn sys_munmap(start: usize, len: usize) -> isize {
+    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
+    let mut page_table=PageTable::from_token(current_user_token());
+    if start%PAGE_SIZE!=0{
+        return -1;
+    }
+    let num_pages=(len+PAGE_SIZE-1)/PAGE_SIZE;
+    if num_pages==0{
+        return 0;
+    }
+    for i in 0..num_pages {
+        let vpn = VirtAddr::from(start + i * PAGE_SIZE).into();
+        if page_table.translate(vpn).is_none() || !page_table.translate(vpn).unwrap().is_valid(){
+            return -1; 
+        }
+    }
+    for i in 0..num_pages{
+        let vpn=VirtAddr::from(start+i*PAGE_SIZE).into();
+        page_table.unmap(vpn);
+    }
+    0
 }
 
 /// change data segment size
