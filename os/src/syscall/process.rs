@@ -3,8 +3,7 @@ use alloc::sync::Arc;
 
 use crate::{
     config::PAGE_SIZE, loader::get_app_data_by_name, mm::{translated_refmut, translated_str, PageTable, VirtAddr}, task::{
-        add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next,
+        add_task, current_task, current_user_token, exit_current_and_run_next, insert_framed_area, suspend_current_and_run_next
     }
 };
 
