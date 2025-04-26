@@ -8,7 +8,7 @@ use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
-
+const BIG_STRIDE:usize=2^32 - 1;
 /// Task control block structure
 ///
 /// Directly save the contents that will not change during running
@@ -22,6 +22,7 @@ pub struct TaskControlBlock {
 
     /// Mutable
     inner: UPSafeCell<TaskControlBlockInner>,
+
 }
 
 impl TaskControlBlock {
@@ -68,6 +69,15 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// stride
+    pub stride : usize,
+
+    /// 步长
+    pub pass:usize,
+
+    /// 优先级
+    pub priority : usize,
 }
 
 impl TaskControlBlockInner {
@@ -106,6 +116,7 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
+            
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -118,6 +129,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    priority:16,
+                    stride: 0,
+                    pass:BIG_STRIDE/16,
                 })
             },
         };
@@ -179,6 +193,7 @@ impl TaskControlBlock {
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
+            
             inner: unsafe {
                 UPSafeCell::new(TaskControlBlockInner {
                     trap_cx_ppn,
@@ -191,6 +206,9 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    priority:parent_inner.priority,
+                    stride: parent_inner.stride,
+                    pass:parent_inner.pass,
                 })
             },
         });

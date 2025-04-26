@@ -24,7 +24,6 @@ mod task;
 use crate::{loader::get_app_data_by_name, mm::{MapPermission, VirtAddr}};
 use alloc::sync::Arc;
 use lazy_static::*;
-pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
@@ -125,7 +124,7 @@ pub fn insert_framed_area(start:usize,len:usize,prot:usize){
     if prot & 0x2 != 0 { permission.insert(MapPermission::W); }
     if prot & 0x4 != 0 { permission.insert(MapPermission::X); }
     permission.insert(MapPermission::U);
-    let task=take_current_task().unwrap();
+    let task=current_task().unwrap();
     let mut inner=task.inner_exclusive_access();
     inner.memory_set.insert_framed_area(start_va, end_va, permission);
 }
