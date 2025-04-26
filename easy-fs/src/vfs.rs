@@ -12,6 +12,8 @@ pub struct Inode {
     block_offset: usize,
     fs: Arc<Mutex<EasyFileSystem>>,
     block_device: Arc<dyn BlockDevice>,
+    /// block nlink
+    pub nlink: u32,
 }
 
 impl Inode {
@@ -27,6 +29,7 @@ impl Inode {
             block_offset,
             fs,
             block_device,
+            nlink:1,
         }
     }
     /// Call a function over a disk inode to read it
@@ -57,6 +60,80 @@ impl Inode {
             }
         }
         None
+    }
+    /// add nlink
+    pub fn add_nlink(&self){
+        self.modify_disk_inode(|disk_inode| {disk_inode.nlink+=1;})
+    }
+    /// delete a nlink
+    pub fn delete_nlink(&self){
+        self.modify_disk_inode(|disk_inode| {disk_inode.nlink-=1});
+        let nlink=self.read_disk_inode(|disk_inode| {disk_inode.nlink});
+        if nlink==0{
+            self.clear();
+        }
+    }
+    /// get nlink
+    pub fn nlink(&self)->u32{
+        self.read_disk_inode(|disk_inode| {disk_inode.nlink})
+    }
+    /// delete a dirent by name
+    fn find_dirent_idx(&self, name: &str, disk_inode: &DiskInode)->Option<usize>{
+        // assert it is a directory
+        assert!(disk_inode.is_dir());
+        let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+        let mut dirent = DirEntry::empty();
+        for i in 0..file_count {
+            assert_eq!(
+                disk_inode.read_at(DIRENT_SZ * i, dirent.as_bytes_mut(), &self.block_device,),
+                DIRENT_SZ,
+            );
+            if dirent.name() == name {
+               return Some(i);
+            }
+            if i==file_count-1{
+                return None;
+            }
+        }
+        None
+    }
+    /// delete a dirent by name
+    pub fn delete_dirent(&self,name:&str)->isize{
+        let idx=self.read_disk_inode(|disk_inode| {self.find_dirent_idx(name, disk_inode)});
+        if idx.is_none(){
+            return -1;
+        }
+        if let Some(idx)=idx{
+            let mut dirent=DirEntry::empty();
+            let file_count=self.read_disk_inode(|disk_inode| (disk_inode.size as usize / DIRENT_SZ));
+            for i in idx..(file_count-1) {
+                self.read_at(DIRENT_SZ*(i+1), dirent.as_bytes_mut());
+                self.write_at(i*DIRENT_SZ,dirent.as_bytes());
+            }
+            let empty_dirent = DirEntry::empty();
+            self.write_at(
+                DIRENT_SZ * (file_count - 1),empty_dirent.as_bytes());
+            self.modify_disk_inode(|disk_inode| {
+                disk_inode.size -= DIRENT_SZ as u32;
+            });
+        }
+        return 0;
+    }
+    /// Make a file link_at
+    pub fn make_file_link_at(&self,old_name:&str,new_name:&str){
+        let inode_id=self.read_disk_inode(|disk_inode| {self.find_inode_id(old_name, disk_inode)});
+        let new_dirent=DirEntry::new(new_name, inode_id.unwrap());
+        let file_num=self.read_disk_inode(|disk_inode| (disk_inode.size as usize / DIRENT_SZ));
+        self.write_at(file_num*DIRENT_SZ, new_dirent.as_bytes());
+    }
+    ///get inode_id by block_id and block_offset
+    pub fn get_inode_id(&self)->usize{
+        let fs=self.fs.lock();
+        fs.get_inode_id_from_pos((self.block_id,self.block_offset))
+    }
+    /// judge whether file
+    pub fn is_file(&self)->bool{
+        self.read_disk_inode(|disk_inode| disk_inode.is_file())
     }
     /// Find inode under current inode by name
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {

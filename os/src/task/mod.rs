@@ -22,11 +22,10 @@ mod switch;
 #[allow(rustdoc::private_intra_doc_links)]
 mod task;
 
-use crate::fs::{open_file, OpenFlags};
+use crate::{fs::{open_file, OpenFlags}, mm::{MapPermission, VirtAddr}};
 use alloc::sync::Arc;
 pub use context::TaskContext;
 use lazy_static::*;
-pub use manager::{fetch_task, TaskManager};
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
@@ -119,4 +118,18 @@ lazy_static! {
 ///Add init process to the manager
 pub fn add_initproc() {
     add_task(INITPROC.clone());
+}
+
+/// insert _framed_area for mmap
+pub fn insert_framed_area(start:usize,len:usize,prot:usize){
+    let start_va=VirtAddr::from(start);
+    let end_va=VirtAddr::from(start+len);
+    let mut permission = MapPermission::empty();
+    if prot & 0x1 != 0 { permission.insert(MapPermission::R); }
+    if prot & 0x2 != 0 { permission.insert(MapPermission::W); }
+    if prot & 0x4 != 0 { permission.insert(MapPermission::X); }
+    permission.insert(MapPermission::U);
+    let task=current_task().unwrap();
+    let mut inner=task.inner_exclusive_access();
+    inner.memory_set.insert_framed_area(start_va, end_va, permission);
 }
